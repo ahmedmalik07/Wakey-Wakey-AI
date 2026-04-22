@@ -1,9 +1,10 @@
 import { Feather } from "@expo/vector-icons";
+import { useAudioPlayer } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Pedometer } from "expo-sensors";
+import { Accelerometer, Pedometer } from "expo-sensors";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,13 +22,16 @@ import { useAlarms } from "@/contexts/AlarmsContext";
 import { useColors } from "@/hooks/useColors";
 import { formatPeriod, formatTime } from "@/lib/format";
 import { getMorningMotivator } from "@/lib/gemini";
+import { getSoundPreset, getToneUri } from "@/lib/sounds";
+
+type Phase = "ringing" | "ad" | "dismissed";
 
 export default function RingingScreen() {
   useKeepAwake();
   const colors = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
-  const { alarms, recordDismissal } = useAlarms();
+  const { alarms, recordDismissal, upsertAlarm } = useAlarms();
   const alarm = useMemo(
     () => alarms.find((a) => a.id === params.id) ?? null,
     [alarms, params.id],
@@ -37,17 +41,69 @@ export default function RingingScreen() {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const [phase, setPhase] = useState<"ringing" | "dismissed">("ringing");
+  const [phase, setPhase] = useState<Phase>("ringing");
+  const [adRemaining, setAdRemaining] = useState(5);
   const [motivator, setMotivator] = useState<string | null>(null);
   const [motivatorLoading, setMotivatorLoading] = useState(false);
+  const [soundUri, setSoundUri] = useState<string | null>(null);
   const startedAtRef = useRef<number>(Date.now());
-  const baselineRef = useRef<number | null>(null);
   const subscriptionRef = useRef<{ remove: () => void } | null>(null);
+  const accelSubRef = useRef<{ remove: () => void } | null>(null);
+  const pedometerBaselineRef = useRef<number | null>(null);
   const dismissedRef = useRef(false);
   const pulse = useRef(new Animated.Value(0)).current;
 
-  const goal = alarm?.stepGoal ?? 30;
+  const mode = alarm?.dismissMode ?? "steps";
+  const goal =
+    mode === "shake" ? alarm?.shakeGoal ?? 20 : alarm?.stepGoal ?? 30;
   const progress = Math.min(steps / goal, 1);
+
+  // Audio player
+  const player = useAudioPlayer(soundUri ? { uri: soundUri } : null);
+
+  useEffect(() => {
+    if (!alarm) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const uri = await getToneUri(getSoundPreset(alarm.sound));
+        if (!cancelled) setSoundUri(uri);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [alarm?.sound]);
+
+  useEffect(() => {
+    if (!soundUri) return;
+    if (phase !== "ringing") {
+      try {
+        player.pause();
+      } catch {}
+      return;
+    }
+    try {
+      player.loop = true;
+      player.volume = alarm?.gentleWake ? 0.15 : 1;
+      player.play();
+    } catch {}
+  }, [soundUri, phase, player, alarm?.gentleWake]);
+
+  // Gentle wake volume ramp
+  useEffect(() => {
+    if (phase !== "ringing" || !alarm?.gentleWake || !soundUri) return;
+    const start = Date.now();
+    const id = setInterval(() => {
+      const elapsed = (Date.now() - start) / 1000;
+      const v = Math.min(1, 0.15 + elapsed / 30);
+      try {
+        player.volume = v;
+      } catch {}
+      if (v >= 1) clearInterval(id);
+    }, 500);
+    return () => clearInterval(id);
+  }, [phase, alarm?.gentleWake, soundUri, player]);
 
   // Pulse animation
   useEffect(() => {
@@ -90,8 +146,9 @@ export default function RingingScreen() {
     };
   }, [phase, alarm?.vibration]);
 
-  // Pedometer setup
+  // Pedometer (steps mode)
   useEffect(() => {
+    if (mode !== "steps") return;
     if (Platform.OS === "web") {
       setAvailable(false);
       return;
@@ -109,11 +166,14 @@ export default function RingingScreen() {
           setPermissionDenied(true);
           return;
         }
+        // watchStepCount returns total steps since subscription started
+        // (cumulative on both platforms per Expo docs).
         subscriptionRef.current = Pedometer.watchStepCount((res) => {
-          if (baselineRef.current === null) {
-            baselineRef.current = 0;
+          if (pedometerBaselineRef.current === null) {
+            pedometerBaselineRef.current = res.steps;
           }
-          setSteps((prev) => prev + res.steps);
+          const delta = res.steps - (pedometerBaselineRef.current ?? 0);
+          setSteps(delta < 0 ? res.steps : delta);
         });
       } catch {
         setAvailable(false);
@@ -122,8 +182,46 @@ export default function RingingScreen() {
     return () => {
       cancelled = true;
       subscriptionRef.current?.remove();
+      subscriptionRef.current = null;
     };
-  }, []);
+  }, [mode]);
+
+  // Accelerometer (shake mode)
+  useEffect(() => {
+    if (mode !== "shake") return;
+    if (Platform.OS === "web") {
+      setAvailable(false);
+      return;
+    }
+    setAvailable(true);
+    let lastShake = 0;
+    let active = false;
+    Accelerometer.setUpdateInterval(80);
+    const sub = Accelerometer.addListener(({ x, y, z }) => {
+      const mag = Math.sqrt(x * x + y * y + z * z);
+      const t = Date.now();
+      if (mag > 1.8 && !active && t - lastShake > 220) {
+        active = true;
+        lastShake = t;
+        setSteps((s) => s + 1);
+        if (Platform.OS !== "web")
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else if (mag < 1.2 && active) {
+        active = false;
+      }
+    });
+    accelSubRef.current = sub;
+    return () => {
+      sub.remove();
+      accelSubRef.current = null;
+    };
+  }, [mode]);
+
+  // Reset progress whenever mode changes inside session
+  useEffect(() => {
+    setSteps(0);
+    pedometerBaselineRef.current = null;
+  }, [mode]);
 
   const finish = useCallback(
     async (success: boolean, finalSteps: number) => {
@@ -131,6 +229,9 @@ export default function RingingScreen() {
       dismissedRef.current = true;
       setPhase("dismissed");
       Vibration.cancel();
+      try {
+        player.pause();
+      } catch {}
       const ranAt = startedAtRef.current;
       const dismissedAt = Date.now();
       if (alarm) {
@@ -146,9 +247,7 @@ export default function RingingScreen() {
       }
       if (success) {
         if (Platform.OS !== "web")
-          Haptics.notificationAsync(
-            Haptics.NotificationFeedbackType.Success,
-          );
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setMotivatorLoading(true);
         try {
           const text = await getMorningMotivator(
@@ -164,7 +263,7 @@ export default function RingingScreen() {
         }
       }
     },
-    [alarm, recordDismissal],
+    [alarm, recordDismissal, player],
   );
 
   // Auto-dismiss when goal hit
@@ -174,12 +273,57 @@ export default function RingingScreen() {
     }
   }, [steps, goal, phase, finish]);
 
+  // Ad countdown
+  useEffect(() => {
+    if (phase !== "ad") return;
+    setAdRemaining(5);
+    const id = setInterval(() => {
+      setAdRemaining((r) => {
+        if (r <= 1) {
+          clearInterval(id);
+          finish(false, steps);
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [phase, steps, finish]);
+
   const handleSimulateStep = () => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== "web")
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSteps((s) => s + 1);
   };
 
-  const handleGiveUp = () => finish(false, steps);
+  const handleGiveUp = () => {
+    if (Platform.OS !== "web")
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Vibration.cancel();
+    try {
+      player.pause();
+    } catch {}
+    setPhase("ad");
+  };
+
+  const handleSnooze = async () => {
+    if (!alarm || dismissedRef.current) return;
+    dismissedRef.current = true;
+    if (Platform.OS !== "web")
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Vibration.cancel();
+    try {
+      player.pause();
+    } catch {}
+    // Push the alarm time forward by snoozeMinutes
+    const snoozeAt = new Date(Date.now() + alarm.snoozeMinutes * 60_000);
+    await upsertAlarm({
+      ...alarm,
+      hour: snoozeAt.getHours(),
+      minute: snoozeAt.getMinutes(),
+    });
+    router.back();
+  };
 
   const handleClose = () => {
     router.back();
@@ -192,9 +336,7 @@ export default function RingingScreen() {
 
   if (!alarm) {
     return (
-      <View
-        style={[styles.container, { backgroundColor: colors.background }]}
-      >
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.foreground }}>Alarm not found</Text>
         <Pressable onPress={handleClose} style={{ marginTop: 16 }}>
           <Text style={{ color: colors.primary }}>Close</Text>
@@ -212,19 +354,26 @@ export default function RingingScreen() {
     outputRange: [0.85, 1],
   });
 
+  const goalLabel = mode === "shake" ? "shakes" : "steps";
+  const actionLabel =
+    mode === "shake" ? "Shake to silence the alarm" : "Walk to silence the alarm";
+  const manualLabel = mode === "shake" ? "Add shake (manual)" : "Add step (manual)";
+
   return (
     <View style={styles.container}>
       <LinearGradient
         colors={
           phase === "ringing"
             ? ["#FF7B47", "#E94560", "#3D2F5C"]
-            : ["#FFB454", "#FF7B47", "#3D2F5C"]
+            : phase === "ad"
+              ? ["#1A1530", "#0E0A1F", "#000"]
+              : ["#FFB454", "#FF7B47", "#3D2F5C"]
         }
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFill}
       />
 
-      {phase === "ringing" ? (
+      {phase === "ringing" && (
         <View style={styles.center}>
           <Text style={styles.alarmLabel}>{alarm.label.toUpperCase()}</Text>
           <Text style={styles.bigClock}>
@@ -247,24 +396,28 @@ export default function RingingScreen() {
             <ProgressRing progress={progress} />
             <View style={styles.ringInner}>
               <Text style={styles.stepCount}>{steps}</Text>
-              <Text style={styles.stepGoal}>of {goal} steps</Text>
+              <Text style={styles.stepGoal}>
+                of {goal} {goalLabel}
+              </Text>
             </View>
           </Animated.View>
 
           {available === false ? (
             <Text style={styles.warn}>
-              No pedometer detected. Use the manual button below.
+              {mode === "shake"
+                ? "Motion sensor unavailable. Use the manual button."
+                : "No pedometer detected. Use the manual button."}
             </Text>
           ) : permissionDenied ? (
             <Text style={styles.warn}>
-              Step permission denied. Use the manual button below.
+              Permission denied. Use the manual button below.
             </Text>
           ) : Platform.OS === "web" ? (
             <Text style={styles.warn}>
-              Step counting is mobile-only. Use the manual button to simulate.
+              Sensor counting is mobile-only. Use the manual button to simulate.
             </Text>
           ) : (
-            <Text style={styles.hint}>Walk to silence the alarm</Text>
+            <Text style={styles.hint}>{actionLabel}</Text>
           )}
 
           <Pressable
@@ -275,34 +428,86 @@ export default function RingingScreen() {
             ]}
           >
             <Feather name="plus" size={14} color="#FFF4E0" />
-            <Text style={styles.simulateText}>Add step (manual)</Text>
+            <Text style={styles.simulateText}>{manualLabel}</Text>
           </Pressable>
 
-          <Pressable
-            onPress={handleGiveUp}
-            style={({ pressed }) => [
-              styles.giveUpBtn,
-              { opacity: pressed ? 0.6 : 1 },
-            ]}
-          >
-            <Text style={styles.giveUpText}>Give up</Text>
-          </Pressable>
+          <View style={styles.bottomRow}>
+            {alarm.snoozeEnabled && (
+              <Pressable
+                onPress={handleSnooze}
+                style={({ pressed }) => [
+                  styles.snoozeBtn,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Feather name="clock" size={14} color="#FFF4E0" />
+                <Text style={styles.snoozeText}>
+                  Snooze {alarm.snoozeMinutes}m
+                </Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={handleGiveUp}
+              style={({ pressed }) => [
+                styles.giveUpBtn,
+                { opacity: pressed ? 0.6 : 1 },
+              ]}
+            >
+              <Text style={styles.giveUpText}>Give up</Text>
+            </Pressable>
+          </View>
         </View>
-      ) : (
+      )}
+
+      {phase === "ad" && (
+        <View style={styles.center}>
+          <View style={styles.adCard}>
+            <Text style={styles.adTag}>SPONSORED</Text>
+            <Text style={styles.adHeadline}>
+              Could've walked it off in {goal} {goalLabel}.
+            </Text>
+            <Text style={styles.adSub}>
+              Tomorrow morning belongs to the people who get up.
+            </Text>
+            <View style={styles.adBrandRow}>
+              <View style={styles.adLogo}>
+                <Feather name="sun" size={20} color="#FF7B47" />
+              </View>
+              <View>
+                <Text style={styles.adBrand}>Wakey Wakey Pro</Text>
+                <Text style={styles.adBrandSub}>Remove ads · Premium sounds</Text>
+              </View>
+            </View>
+            <View style={styles.adCountdownWrap}>
+              <Text style={styles.adCountdown}>
+                Skip in {adRemaining}s
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {phase === "dismissed" && (
         <View style={styles.center}>
           <View style={styles.successCircle}>
             <Feather name="sun" size={48} color="#FF7B47" />
           </View>
-          <Text style={styles.successTitle}>Good morning</Text>
+          <Text style={styles.successTitle}>
+            {motivator || motivatorLoading ? "Good morning" : "Alarm ended"}
+          </Text>
           <Text style={styles.successSub}>
-            {steps} steps · {elapsedLabel}
+            {steps} {goalLabel} · {elapsedLabel}
           </Text>
 
           <View style={styles.motivatorBox}>
             {motivatorLoading ? (
               <ActivityIndicator color="#FFF4E0" />
-            ) : (
+            ) : motivator ? (
               <Text style={styles.motivator}>{motivator}</Text>
+            ) : (
+              <Text style={styles.motivator}>
+                Try again tomorrow. Your future self is watching.
+              </Text>
             )}
           </View>
 
@@ -313,7 +518,9 @@ export default function RingingScreen() {
               { opacity: pressed ? 0.85 : 1 },
             ]}
           >
-            <Text style={styles.doneText}>Start the day</Text>
+            <Text style={styles.doneText}>
+              {motivator ? "Start the day" : "Close"}
+            </Text>
           </Pressable>
         </View>
       )}
@@ -322,7 +529,6 @@ export default function RingingScreen() {
 }
 
 function ProgressRing({ progress }: { progress: number }) {
-  // Simple ring built with views — avoids SVG dependency at runtime cost
   const size = 220;
   const stroke = 14;
   return (
@@ -461,13 +667,107 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#FFF4E0",
   },
-  giveUpBtn: { padding: 16, marginTop: 24 },
+  bottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginTop: 24,
+  },
+  snoozeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.22)",
+  },
+  snoozeText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: "#FFF4E0",
+  },
+  giveUpBtn: { padding: 12 },
   giveUpText: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
     color: "#FFF4E0",
     opacity: 0.7,
     textDecorationLine: "underline",
+  },
+  adCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "rgba(255,244,224,0.08)",
+    borderColor: "rgba(255,244,224,0.18)",
+    borderWidth: 1,
+    borderRadius: 22,
+    padding: 22,
+  },
+  adTag: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 10,
+    letterSpacing: 2,
+    color: "#FFB454",
+    marginBottom: 12,
+  },
+  adHeadline: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 24,
+    color: "#FFF4E0",
+    letterSpacing: -0.5,
+    lineHeight: 30,
+  },
+  adSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    color: "#FFF4E0",
+    opacity: 0.78,
+    marginTop: 12,
+    lineHeight: 20,
+  },
+  adBrandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 24,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,244,224,0.12)",
+  },
+  adLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#FFF4E0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adBrand: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: "#FFF4E0",
+  },
+  adBrandSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "#FFF4E0",
+    opacity: 0.65,
+    marginTop: 2,
+  },
+  adCountdownWrap: {
+    marginTop: 22,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,244,224,0.12)",
+    alignItems: "center",
+  },
+  adCountdown: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: "#FFF4E0",
+    opacity: 0.65,
+    letterSpacing: 1,
   },
   successCircle: {
     width: 96,

@@ -222,7 +222,7 @@ export default function StatsScreen() {
           ]}
         >
           <Feather
-            name="sparkles" as any
+            name="zap"
             size={14}
             color={colors.primaryForeground}
           />

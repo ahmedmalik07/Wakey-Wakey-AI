@@ -47,6 +47,14 @@ function RootLayoutNav() {
         }}
       />
       <Stack.Screen
+        name="sounds"
+        options={{
+          presentation: "modal",
+          title: "Sound",
+          headerStyle: { backgroundColor: "#1A1530" },
+        }}
+      />
+      <Stack.Screen
         name="ringing"
         options={{
           headerShown: false,

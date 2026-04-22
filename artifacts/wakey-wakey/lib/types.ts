@@ -1,5 +1,7 @@
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
+export type DismissMode = "steps" | "shake";
+
 export interface Alarm {
   id: string;
   label: string;
@@ -7,7 +9,11 @@ export interface Alarm {
   minute: number;
   enabled: boolean;
   days: Weekday[];
+  dismissMode: DismissMode;
   stepGoal: number;
+  shakeGoal: number;
+  snoozeEnabled: boolean;
+  snoozeMinutes: number;
   sound: string;
   vibration: boolean;
   gentleWake: boolean;
