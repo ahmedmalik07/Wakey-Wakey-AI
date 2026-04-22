@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "Wakey Wakey"
+version = "1.0.0"
+id = "artifacts/wakey-wakey"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 24945
+
+[services.development]
+run = "pnpm --filter @workspace/wakey-wakey run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/wakey-wakey", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/wakey-wakey", "run", "serve" ]
+
+[services.env]
+PORT = "24945"
+BASE_PATH = "/"

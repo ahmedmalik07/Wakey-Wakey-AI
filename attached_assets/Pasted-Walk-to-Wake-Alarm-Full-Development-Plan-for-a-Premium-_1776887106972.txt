@@ -1,0 +1,203 @@
+Walk-to-Wake Alarm: Full Development Plan for a Premium, Zero-Cost Android App
+This is a complete, production-ready blueprint to build Walk-to-Wake — an alarm that refuses to shut up until the phone’s pedometer confirms you’ve walked at least 30 steps. The app will feel premium (think Sleep as Android or Alarmy but focused, modern, and actually free), while staying 100% within free tiers and open-source tools. No paid APIs, no cloud bills, no surprises.
+I’ve thought deeply about reliability (Android’s aggressive battery/Doze restrictions), user delight, AI that actually adds value without eating quotas, and scalability. The result is a feature-rich app that could easily go viral on r/androidapps or F-Droid.
+1. Core Feature (Non-Negotiable)
+
+Alarm triggers → full-screen overlay + loud looping sound (user-chosen ringtone or custom MP3).
+Sound does not stop (even if user presses power button or app is backgrounded) until real walking steps are detected.
+Uses Health Connect (preferred) or fallback to SensorManager.TYPE_STEP_COUNTER.
+Records baseline steps at alarm start → dismisses when Δsteps ≥ user-configurable threshold (default 30).
+
+2. Feature Set – Making It Far From Basic
+Alarm Management
+
+Recurring alarms (Mon–Sun, custom days, weekends only).
+Labels, custom volume ramp-up (0% → 100% over 30s), vibration patterns.
+“Gentle wake” mode: starts silent + gradually louder.
+Snooze with step requirement (optional toggle).
+
+Walk-to-Wake Enhancements
+
+Configurable step goal (10–100) per alarm.
+“Proof of walking” progress ring + live step counter.
+Fallback mode (if no pedometer): accelerometer-based shake detection (simple algorithm) + warning banner.
+
+Statistics & Insights Dashboard
+
+Success rate, average time-to-30-steps, weekly streaks.
+Beautiful charts (Vico Compose library – free).
+Export to CSV.
+
+Health Connect Integration
+
+Automatic step syncing (Android 14+ built-in on-device counting).
+Reads/writes steps for accuracy and battery efficiency.
+Optional daily step goal linking.
+
+AI-Powered Features (All Free Tier / On-Device)
+These are the “wow” factors that make the app feel intelligent without cost:
+
+AI Morning Motivator (Gemini 2.5 Flash-Lite via official Android SDK)
+After successful dismissal: generates personalized 1–2 sentence motivation + fun fact or joke.
+Prompt example: “User just walked 30 steps to kill their 6:45 AM alarm. Generate a short, energetic, positive message mentioning their name and today’s weather if available.”
+Runs on-device where Gemini Nano is available (Pixel/Samsung); falls back to cloud free tier (15 RPM / 1,000 RPD – more than enough; 1 call per alarm max).
+
+Smart Alarm Advisor (on-device or Gemini API)
+Analyzes past 7–30 days of alarm data (stored in Room).
+Suggests: “You succeed 92% when waking at 7:00 AM on weekdays. Want me to shift your Friday alarm 15 min later?”
+Uses simple TensorFlow Lite model (pre-trained lightweight regressor) + Gemini for natural-language summary.
+
+Voice Command Setup (Android SpeechRecognizer – fully on-device)
+“Hey, set a walk-to-wake alarm for 7 AM weekdays with 40 steps.”
+Voice confirmation readout via Text-to-Speech.
+
+Weekly AI Insight Report
+Every Sunday: “You beat 6/7 alarms this week! Your fastest walk time was 18 seconds on Tuesday. Here’s how to improve sleep consistency…”
+
+
+Polish & Delight
+
+Material You dynamic theming + dark mode.
+Home-screen widget for quick alarm toggle.
+Achievements & streaks (e.g., “30-Day Early Riser”).
+Accessibility-first (TalkBack, large touch targets, high-contrast mode).
+Backup/restore alarms via local JSON export (no cloud needed).
+
+3. Technical Architecture (Modern, Maintainable, Free)
+
+Language: Kotlin 100%
+UI: Jetpack Compose + Material 3 (no XML)
+Architecture: MVVM + Clean Architecture + Hilt (DI)
+Data: Room DB + DataStore (preferences)
+Background:
+AlarmManager + BroadcastReceiver for scheduling
+Foreground Service (AlarmRingingService) for sound + step monitoring (highest priority, user-visible notification “Alarm ringing – walk to dismiss”)
+
+Steps:
+Primary: Health Connect SDK (androidx.health.connect:connect-client)
+Fallback: SensorManager + TYPE_STEP_COUNTER
+
+AI:
+Gemini SDK (com.google.ai.client.generativeai:generativeai)
+On-device: Gemini Nano (via Firebase AI Logic where supported) or ML Kit + custom TFLite
+
+Audio: MediaPlayer + AudioAttributes.USAGE_ALARM
+Charts: Vico Compose (lightweight, free)
+Testing: JUnit5 + Compose UI testing + Robolectric
+
+Key Permissions (all declared + runtime requested):
+
+ACTIVITY_RECOGNITION
+POST_NOTIFICATIONS
+SCHEDULE_EXACT_ALARM (Android 12+)
+Health Connect READ_STEPS + WRITE_STEPS
+Optional: FOREGROUND_SERVICE + battery optimization exemption prompt
+
+4. Implementation Roadmap (8–10 Weeks Solo)
+Phase 0 (1 day): Project setup
+
+Android Studio → New Compose project (minSDK 34)
+Add Hilt, Room, Health Connect, Gemini SDK, Vico
+Reference open-source base: ahudson20/whakaara (Jetpack Compose alarm) for alarm list UI patterns.
+
+Phase 1 (1 week): Core Walk-to-Wake
+
+Alarm entity + Room DAO
+Exact Alarm scheduling + receiver
+Foreground AlarmRingingService with looping audio + step listener
+Health Connect permission flow + step delta calculation
+
+Phase 2 (1 week): Full Alarm UI + Recurrence
+
+Compose screens: AlarmList, AddEditAlarm, TimePicker, Day picker
+Recurring logic using AlarmManager.setInexactRepeating + custom logic for complex schedules
+
+Phase 3 (1 week): Health Connect + Fallback + Polish
+
+Real-time step reading via HealthConnectClient
+Sensor fallback + shake detection
+Full-screen alarm UI with progress
+
+Phase 4 (10 days): Statistics + Charts
+
+Room entities for history
+Vico charts + success metrics
+
+Phase 5 (10 days): AI Features
+
+Gemini integration (ViewModel + coroutine)
+On-device fallback detection
+Voice setup + TTS
+
+Phase 6 (1 week): Testing, Battery, Polish, Release
+
+Doze/Battery optimization exemption screen
+Edge cases: no sensor, low battery, app killed
+Build signed APK + optional Play Store upload ($25 one-time fee)
+
+5. Critical Code Patterns (Ready to Copy-Paste)
+Health Connect Step Monitoring (in Foreground Service)
+Kotlinval client = HealthConnectClient.getOrCreate(context)
+val request = ReadRecordsRequest(
+    recordType = StepsRecord::class,
+    timeRangeFilter = TimeRangeFilter.between(startTime, Instant.now())
+)
+val response = client.readRecords(request)
+// Compute delta from baseline recorded at alarm start
+Gemini AI Call (in ViewModel)
+Kotlinval model = GenerativeModel(
+    modelName = "gemini-2.5-flash-lite", // free tier friendly
+    apiKey = BuildConfig.GEMINI_API_KEY // store in local.properties
+)
+val response = model.generateContent(
+    "User just walked ${steps} steps to kill their alarm. Generate a 15-word energetic morning message."
+)
+Foreground Service Notification (keeps service alive)
+Use startForeground(1, notification) with ongoing channel.
+6. Challenges & Bulletproof Solutions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ChallengeSolutionAndroid kills background alarmsForeground Service + exact alarms + battery exemption promptDoze mode / battery optimizationExplicit REQUEST_IGNORE_BATTERY_OPTIMIZATIONS + user education screenNo step counter sensorDetect via SensorManager → fallback to accelerometer shake algorithmRate limits on GeminiOn-device Nano first; cloud only on dismissal (1 call/day per user max)Play Store publishing$25 one-time (or release on GitHub + F-Droid for truly zero cost)
+7. Cost Breakdown (Truly Zero)
+
+Everything above: $0
+Optional Play Console: $25 once (skip if you sideload or use F-Droid)
+Gemini: Free tier is more than sufficient for this use case
+No Firebase, no backend, no ads
+
+8. Next Steps – Start Coding Today
+
+Open Android Studio → New Project → “Empty Compose Activity”
+git clone https://github.com/ahudson20/whakaara as reference (great Compose alarm skeleton)
+Add the dependencies listed above
+Implement Phase 1 core first — you’ll have a working prototype in < 3 days
+Open-source it on GitHub under MIT — instant community feedback
+
+This plan is deliberately over-engineered for quality: it’s not just an alarm, it’s a habit-forming wake-up system with AI that feels magical but costs nothing.
