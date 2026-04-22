@@ -5,6 +5,7 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
+  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -86,7 +87,13 @@ export default function AlarmsScreen() {
         style={[styles.heroGradient, { paddingTop: topPad }]}
       >
         <View style={styles.heroInner}>
-          <Text style={styles.heroLabel}>WAKEY WAKEY</Text>
+          <View style={styles.brandRow}>
+            <Image
+              source={require("@/assets/images/icon.png")}
+              style={styles.brandLogo}
+            />
+            <Text style={styles.heroLabel}>WAKEY WAKEY</Text>
+          </View>
           {nextAlarm ? (
             <>
               <Text style={styles.heroCount}>
@@ -287,6 +294,8 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   heroInner: { paddingTop: 16 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 },
+  brandLogo: { width: 28, height: 28, borderRadius: 7 },
   heroLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,
