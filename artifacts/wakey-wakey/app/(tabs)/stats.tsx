@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Credits } from "@/components/Credits";
 import { useAlarms } from "@/contexts/AlarmsContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useColors } from "@/hooks/useColors";
@@ -433,6 +434,7 @@ export default function StatsScreen() {
           </Pressable>
         </View>
       )}
+      <Credits />
     </ScrollView>
   );
 }

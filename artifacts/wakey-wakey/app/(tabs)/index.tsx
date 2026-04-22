@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Credits } from "@/components/Credits";
 import { useAlarms } from "@/contexts/AlarmsContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useColors } from "@/hooks/useColors";
@@ -155,6 +156,7 @@ export default function AlarmsScreen() {
           paddingBottom: 120,
           gap: 12,
         }}
+        ListFooterComponent={<Credits />}
         scrollEnabled={sorted.length > 0}
         ListEmptyComponent={
           <View style={styles.empty}>
