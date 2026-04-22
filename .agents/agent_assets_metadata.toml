@@ -1,8 +1,19 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "tzke2YkOypZM8eoUSsOIx"
 uri = "file://artifacts/wakey-wakey/assets/images/icon.png"
 type = "image"
 title = "generated_image"
+
+[[generated]]
+id = "xHp0QKubm_7uF9Rn-iGrH"
+uri = "file://attached_assets/generated_images/generated_image.png"
+type = "image"
+title = "generated_image"
+
+[[outputs]]
+id = "udYx70g5uuF5ikRWzxQDG"
+uri = "file://artifacts/wakey-wakey/assets/images/icon.png"
+type = "image"
+title = "Wakey Wakey App Icon"
