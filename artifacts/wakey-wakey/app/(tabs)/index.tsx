@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAlarms } from "@/contexts/AlarmsContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useColors } from "@/hooks/useColors";
 import {
   formatCountdown,
@@ -30,6 +31,7 @@ export default function AlarmsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { alarms, toggleAlarm } = useAlarms();
+  const { pedometer, requestPedometer, openSettings } = usePermissions();
   const [now, setNow] = useState<number>(Date.now());
 
   useEffect(() => {
@@ -104,6 +106,39 @@ export default function AlarmsScreen() {
           )}
         </View>
       </LinearGradient>
+
+      {(pedometer === "denied" || pedometer === "undetermined") &&
+        alarms.some((a) => a.enabled && a.dismissMode === "steps") && (
+          <Pressable
+            onPress={async () => {
+              if (pedometer === "denied") openSettings();
+              else await requestPedometer();
+            }}
+            style={({ pressed }) => [
+              styles.permBanner,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.accent,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Feather name="alert-circle" size={16} color={colors.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitle, { color: colors.foreground }]}>
+                Step access needed
+              </Text>
+              <Text
+                style={[styles.bannerSub, { color: colors.mutedForeground }]}
+              >
+                {pedometer === "denied"
+                  ? "Open settings to enable motion tracking."
+                  : "Tap to grant permission so walk-to-wake works."}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+          </Pressable>
+        )}
 
       <FlatList
         data={sorted}
@@ -324,6 +359,18 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
     gap: 12,
   },
+  permBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  bannerTitle: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  bannerSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
   emptyTitle: {
     fontFamily: "Outfit_600SemiBold",
     fontSize: 20,

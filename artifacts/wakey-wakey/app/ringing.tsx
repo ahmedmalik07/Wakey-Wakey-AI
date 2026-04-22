@@ -19,6 +19,7 @@ import {
 } from "react-native";
 
 import { useAlarms } from "@/contexts/AlarmsContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useColors } from "@/hooks/useColors";
 import { formatPeriod, formatTime } from "@/lib/format";
 import { getMorningMotivator } from "@/lib/gemini";
@@ -32,6 +33,7 @@ export default function RingingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const { alarms, recordDismissal, upsertAlarm } = useAlarms();
+  const { pedometer: pedometerStatus } = usePermissions();
   const alarm = useMemo(
     () => alarms.find((a) => a.id === params.id) ?? null,
     [alarms, params.id],
@@ -160,9 +162,7 @@ export default function RingingScreen() {
         if (cancelled) return;
         setAvailable(isAvail);
         if (!isAvail) return;
-        const perm = await Pedometer.requestPermissionsAsync();
-        if (cancelled) return;
-        if (perm.status !== "granted") {
+        if (pedometerStatus !== "granted") {
           setPermissionDenied(true);
           return;
         }
@@ -184,7 +184,7 @@ export default function RingingScreen() {
       subscriptionRef.current?.remove();
       subscriptionRef.current = null;
     };
-  }, [mode]);
+  }, [mode, pedometerStatus]);
 
   // Accelerometer (shake mode)
   useEffect(() => {

@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAlarms } from "@/contexts/AlarmsContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useColors } from "@/hooks/useColors";
 import { getWeeklyInsight } from "@/lib/gemini";
 
@@ -19,6 +20,12 @@ export default function StatsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { history, clearHistory } = useAlarms();
+  const {
+    pedometer,
+    requestPedometer,
+    openSettings,
+    refresh: refreshPerms,
+  } = usePermissions();
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +178,111 @@ export default function StatsScreen() {
               </View>
             );
           })}
+        </View>
+      </View>
+
+      <View
+        style={[
+          styles.permCard,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        <View style={styles.permHeader}>
+          <Feather
+            name="shield"
+            size={16}
+            color={
+              pedometer === "granted"
+                ? colors.primary
+                : pedometer === "unsupported"
+                  ? colors.mutedForeground
+                  : colors.accent
+            }
+          />
+          <Text style={[styles.insightTitle, { color: colors.foreground }]}>
+            Motion & step access
+          </Text>
+        </View>
+        <Text
+          style={[
+            styles.insightText,
+            {
+              color:
+                pedometer === "granted"
+                  ? colors.mutedForeground
+                  : colors.foreground,
+            },
+          ]}
+        >
+          {pedometer === "granted"
+            ? "Step counting is enabled. Walk-to-wake alarms work normally."
+            : pedometer === "unsupported"
+              ? "This device doesn't expose a pedometer. Manual step button still works."
+              : pedometer === "denied"
+                ? "Permission was denied. Open system settings to grant motion access."
+                : "Permission not yet granted. Tap below to allow step counting."}
+        </Text>
+        <View style={styles.permRow}>
+          <Pressable
+            onPress={async () => {
+              if (pedometer === "denied") {
+                openSettings();
+                setTimeout(refreshPerms, 1500);
+              } else if (pedometer === "undetermined") {
+                await requestPedometer();
+              } else {
+                await refreshPerms();
+              }
+            }}
+            disabled={pedometer === "unsupported"}
+            style={({ pressed }) => [
+              styles.permBtn,
+              {
+                backgroundColor:
+                  pedometer === "granted"
+                    ? colors.muted
+                    : pedometer === "unsupported"
+                      ? colors.muted
+                      : colors.primary,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.permBtnText,
+                {
+                  color:
+                    pedometer === "granted"
+                      ? colors.foreground
+                      : pedometer === "unsupported"
+                        ? colors.mutedForeground
+                        : colors.primaryForeground,
+                },
+              ]}
+            >
+              {pedometer === "granted"
+                ? "Granted · Re-check"
+                : pedometer === "denied"
+                  ? "Open settings"
+                  : pedometer === "unsupported"
+                    ? "Unavailable"
+                    : "Grant access"}
+            </Text>
+          </Pressable>
+          <View
+            style={[
+              styles.statusDot,
+              {
+                backgroundColor:
+                  pedometer === "granted"
+                    ? colors.primary
+                    : pedometer === "unsupported"
+                      ? colors.muted
+                      : colors.accent,
+              },
+            ]}
+          />
         </View>
       </View>
 
@@ -478,5 +590,37 @@ const styles = StyleSheet.create({
   clearBtnText: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
+  },
+  permCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+    marginTop: 16,
+  },
+  permHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  permRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  permBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  permBtnText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
 });
