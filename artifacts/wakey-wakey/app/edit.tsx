@@ -16,13 +16,16 @@ import {
 } from "react-native";
 
 import { useAlarms } from "@/contexts/AlarmsContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { useColors } from "@/hooks/useColors";
 import { formatTime } from "@/lib/format";
+import { difficultyDescription, difficultyLabel } from "@/lib/math";
 import { getSoundPreset } from "@/lib/sounds";
 import {
   DAY_LABELS,
   type Alarm,
   type DismissMode,
+  type MathDifficulty,
   type Weekday,
 } from "@/lib/types";
 
@@ -31,13 +34,22 @@ export default function EditAlarmScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const { alarms, upsertAlarm, deleteAlarm, createAlarm } = useAlarms();
+  const { settings } = useSettings();
 
   const existing = useMemo(
     () => (params.id ? alarms.find((a) => a.id === params.id) : null),
     [params.id, alarms],
   );
 
-  const [draft, setDraft] = useState<Alarm>(() => existing ?? createAlarm());
+  const [draft, setDraft] = useState<Alarm>(
+    () =>
+      existing ??
+      createAlarm({
+        dismissMode: settings.defaultDismissMode,
+        snoozeMinutes: settings.defaultSnoozeMinutes,
+        stepGoal: settings.defaultStepGoal,
+      }),
+  );
 
   // Keep draft in sync with sound picker selection
   useEffect(() => {
@@ -133,7 +145,14 @@ export default function EditAlarmScreen() {
     update({ hour: hour24 });
   };
 
-  const selectedSound = getSoundPreset(draft.sound);
+  const isCustomSound = draft.sound === "custom" && !!draft.customSoundUri;
+  const selectedSound = isCustomSound
+    ? {
+        id: "custom",
+        name: draft.customSoundName || "Custom audio",
+        description: "From your device library",
+      }
+    : getSoundPreset(draft.sound);
 
   return (
     <ScrollView
@@ -253,6 +272,7 @@ export default function EditAlarmScreen() {
             [
               { id: "steps", label: "Walk", icon: "activity" },
               { id: "shake", label: "Shake", icon: "smartphone" },
+              { id: "math", label: "Math", icon: "hash" },
             ] as { id: DismissMode; label: string; icon: any }[]
           ).map((opt) => {
             const active = draft.dismissMode === opt.id;
@@ -295,7 +315,7 @@ export default function EditAlarmScreen() {
         </View>
       </Section>
 
-      {draft.dismissMode === "steps" ? (
+      {draft.dismissMode === "steps" && (
         <Section label={`Steps to dismiss · ${draft.stepGoal}`}>
           <SliderCard
             min={5}
@@ -306,7 +326,8 @@ export default function EditAlarmScreen() {
             colors={colors}
           />
         </Section>
-      ) : (
+      )}
+      {draft.dismissMode === "shake" && (
         <Section label={`Shakes to dismiss · ${draft.shakeGoal}`}>
           <SliderCard
             min={5}
@@ -317,6 +338,72 @@ export default function EditAlarmScreen() {
             colors={colors}
           />
         </Section>
+      )}
+      {draft.dismissMode === "math" && (
+        <>
+          <Section label="Math difficulty">
+            <View style={styles.modeRow}>
+              {(["easy", "medium", "hard"] as MathDifficulty[]).map((d) => {
+                const active = draft.mathDifficulty === d;
+                return (
+                  <Pressable
+                    key={d}
+                    onPress={() => {
+                      if (Platform.OS !== "web") Haptics.selectionAsync();
+                      update({ mathDifficulty: d });
+                    }}
+                    style={({ pressed }) => [
+                      styles.modeBtn,
+                      {
+                        backgroundColor: active ? colors.primary : colors.card,
+                        borderColor: active ? colors.primary : colors.border,
+                        opacity: pressed ? 0.85 : 1,
+                        flexDirection: "column",
+                        gap: 2,
+                        paddingVertical: 12,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.modeText,
+                        {
+                          color: active
+                            ? colors.primaryForeground
+                            : colors.foreground,
+                        },
+                      ]}
+                    >
+                      {difficultyLabel(d)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text
+              style={[
+                styles.helper,
+                {
+                  color: colors.mutedForeground,
+                  marginTop: 8,
+                  textAlign: "left",
+                },
+              ]}
+            >
+              {difficultyDescription(draft.mathDifficulty)}
+            </Text>
+          </Section>
+          <Section label={`Problems to solve · ${draft.mathCount}`}>
+            <SliderCard
+              min={1}
+              max={10}
+              step={1}
+              value={draft.mathCount}
+              onChange={(v) => update({ mathCount: v })}
+              colors={colors}
+            />
+          </Section>
+        </>
       )}
 
       <Section label="Sound">

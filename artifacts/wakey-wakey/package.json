@@ -59,8 +59,11 @@
     "@expo-google-fonts/outfit": "^0.4.3",
     "@react-native-community/slider": "^5.0.1",
     "expo-audio": "^1.1.1",
+    "expo-document-picker": "~14.0.8",
     "expo-file-system": "^19.0.21",
+    "expo-intent-launcher": "~13.0.8",
     "expo-keep-awake": "^15.0.8",
+    "expo-notifications": "~0.32.16",
     "expo-sensors": "^15.0.8"
   }
 }

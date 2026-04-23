@@ -8,6 +8,12 @@ import React, {
 } from "react";
 
 import {
+  cancelAlarmNotifications,
+  ensureNotificationSetup,
+  rescheduleAll,
+  scheduleAlarmNotifications,
+} from "@/lib/notifications";
+import {
   loadAlarms,
   loadHistory,
   newId,
@@ -37,10 +43,19 @@ export function AlarmsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      await ensureNotificationSetup();
       const [a, h] = await Promise.all([loadAlarms(), loadHistory()]);
-      setAlarms(a);
+      // Backfill new fields on stored alarms
+      const normalized = a.map((al) => ({
+        mathCount: 3,
+        mathDifficulty: "easy" as const,
+        ...al,
+      }));
+      setAlarms(normalized);
       setHistory(h);
       setReady(true);
+      // Reconcile system schedule with stored alarms
+      void rescheduleAll(normalized);
     })();
   }, []);
 
@@ -54,14 +69,21 @@ export function AlarmsProvider({ children }: { children: React.ReactNode }) {
       void saveAlarms(next);
       return next;
     });
+    void scheduleAlarmNotifications(alarm);
   }, []);
 
   const toggleAlarm = useCallback(async (id: string, enabled: boolean) => {
+    let updated: Alarm | undefined;
     setAlarms((prev) => {
-      const next = prev.map((a) => (a.id === id ? { ...a, enabled } : a));
+      const next = prev.map((a) => {
+        if (a.id !== id) return a;
+        updated = { ...a, enabled };
+        return updated;
+      });
       void saveAlarms(next);
       return next;
     });
+    if (updated) void scheduleAlarmNotifications(updated);
   }, []);
 
   const deleteAlarm = useCallback(async (id: string) => {
@@ -70,6 +92,7 @@ export function AlarmsProvider({ children }: { children: React.ReactNode }) {
       void saveAlarms(next);
       return next;
     });
+    void cancelAlarmNotifications(id);
   }, []);
 
   const createAlarm = useCallback((partial?: Partial<Alarm>): Alarm => {
@@ -84,6 +107,8 @@ export function AlarmsProvider({ children }: { children: React.ReactNode }) {
       dismissMode: "steps",
       stepGoal: 30,
       shakeGoal: 20,
+      mathCount: 3,
+      mathDifficulty: "easy",
       snoozeEnabled: true,
       snoozeMinutes: 5,
       sound: "sunrise",

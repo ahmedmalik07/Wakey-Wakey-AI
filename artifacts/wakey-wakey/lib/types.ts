@@ -1,6 +1,8 @@
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
-export type DismissMode = "steps" | "shake";
+export type DismissMode = "steps" | "shake" | "math";
+
+export type MathDifficulty = "easy" | "medium" | "hard";
 
 export interface Alarm {
   id: string;
@@ -12,9 +14,13 @@ export interface Alarm {
   dismissMode: DismissMode;
   stepGoal: number;
   shakeGoal: number;
+  mathCount: number;
+  mathDifficulty: MathDifficulty;
   snoozeEnabled: boolean;
   snoozeMinutes: number;
   sound: string;
+  customSoundUri?: string;
+  customSoundName?: string;
   vibration: boolean;
   gentleWake: boolean;
   createdAt: number;

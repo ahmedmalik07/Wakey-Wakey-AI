@@ -15,14 +15,31 @@
     },
     "ios": {
       "supportsTablet": false,
-      "icon": "./assets/images/icon.png"
+      "icon": "./assets/images/icon.png",
+      "infoPlist": {
+        "NSMotionUsageDescription": "Wakey Wakey counts your steps to dismiss alarms so you actually wake up.",
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "android": {
       "icon": "./assets/images/icon.png",
+      "package": "com.wyibe.wakeywakey",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#1A1530"
-      }
+      },
+      "permissions": [
+        "ACTIVITY_RECOGNITION",
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "WAKE_LOCK",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "DISABLE_KEYGUARD",
+        "FOREGROUND_SERVICE",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -35,7 +52,16 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#FF7B47",
+          "androidMode": "default",
+          "androidCollapsedTitle": "Wakey Wakey alarm"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

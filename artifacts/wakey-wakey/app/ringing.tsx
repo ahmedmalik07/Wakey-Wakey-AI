@@ -23,7 +23,9 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { useColors } from "@/hooks/useColors";
 import { formatPeriod, formatTime } from "@/lib/format";
 import { getMorningMotivator } from "@/lib/gemini";
+import { generateMathProblem, type MathProblem } from "@/lib/math";
 import { getSoundPreset, getToneUri } from "@/lib/sounds";
+import { TextInput } from "react-native";
 
 type Phase = "ringing" | "ad" | "dismissed";
 
@@ -57,8 +59,44 @@ export default function RingingScreen() {
 
   const mode = alarm?.dismissMode ?? "steps";
   const goal =
-    mode === "shake" ? alarm?.shakeGoal ?? 20 : alarm?.stepGoal ?? 30;
+    mode === "shake"
+      ? alarm?.shakeGoal ?? 20
+      : mode === "math"
+        ? alarm?.mathCount ?? 3
+        : alarm?.stepGoal ?? 30;
   const progress = Math.min(steps / goal, 1);
+
+  // Math state
+  const [mathProblem, setMathProblem] = useState<MathProblem | null>(null);
+  const [mathInput, setMathInput] = useState("");
+  const [mathError, setMathError] = useState(false);
+
+  useEffect(() => {
+    if (mode === "math" && alarm && !mathProblem) {
+      setMathProblem(generateMathProblem(alarm.mathDifficulty ?? "easy"));
+    }
+  }, [mode, alarm, mathProblem]);
+
+  const submitMath = () => {
+    if (!alarm || !mathProblem) return;
+    const parsed = Number.parseInt(mathInput.trim(), 10);
+    if (Number.isNaN(parsed)) {
+      setMathError(true);
+      return;
+    }
+    if (parsed === mathProblem.answer) {
+      setMathError(false);
+      setMathInput("");
+      setSteps((s) => s + 1);
+      setMathProblem(generateMathProblem(alarm.mathDifficulty ?? "easy"));
+      if (Platform.OS !== "web")
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else {
+      setMathError(true);
+      if (Platform.OS !== "web")
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
 
   // Audio player
   const player = useAudioPlayer(soundUri ? { uri: soundUri } : null);
@@ -68,6 +106,10 @@ export default function RingingScreen() {
     let cancelled = false;
     (async () => {
       try {
+        if (alarm.sound === "custom" && alarm.customSoundUri) {
+          if (!cancelled) setSoundUri(alarm.customSoundUri);
+          return;
+        }
         const uri = await getToneUri(getSoundPreset(alarm.sound));
         if (!cancelled) setSoundUri(uri);
       } catch {}
@@ -75,7 +117,7 @@ export default function RingingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [alarm?.sound]);
+  }, [alarm?.sound, alarm?.customSoundUri]);
 
   useEffect(() => {
     if (!soundUri) return;
@@ -354,10 +396,16 @@ export default function RingingScreen() {
     outputRange: [0.85, 1],
   });
 
-  const goalLabel = mode === "shake" ? "shakes" : "steps";
+  const goalLabel =
+    mode === "shake" ? "shakes" : mode === "math" ? "problems" : "steps";
   const actionLabel =
-    mode === "shake" ? "Shake to silence the alarm" : "Walk to silence the alarm";
-  const manualLabel = mode === "shake" ? "Add shake (manual)" : "Add step (manual)";
+    mode === "shake"
+      ? "Shake to silence the alarm"
+      : mode === "math"
+        ? "Solve to silence the alarm"
+        : "Walk to silence the alarm";
+  const manualLabel =
+    mode === "shake" ? "Add shake (manual)" : "Add step (manual)";
 
   return (
     <View style={styles.container}>
@@ -402,7 +450,9 @@ export default function RingingScreen() {
             </View>
           </Animated.View>
 
-          {available === false ? (
+          {mode === "math" ? (
+            <Text style={styles.hint}>{actionLabel}</Text>
+          ) : available === false ? (
             <Text style={styles.warn}>
               {mode === "shake"
                 ? "Motion sensor unavailable. Use the manual button."
@@ -420,16 +470,56 @@ export default function RingingScreen() {
             <Text style={styles.hint}>{actionLabel}</Text>
           )}
 
-          <Pressable
-            onPress={handleSimulateStep}
-            style={({ pressed }) => [
-              styles.simulateBtn,
-              { opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <Feather name="plus" size={14} color="#FFF4E0" />
-            <Text style={styles.simulateText}>{manualLabel}</Text>
-          </Pressable>
+          {mode === "math" ? (
+            <View style={styles.mathCard}>
+              <Text style={styles.mathPrompt}>
+                {mathProblem?.question ?? "…"}
+              </Text>
+              <TextInput
+                value={mathInput}
+                onChangeText={(t) => {
+                  setMathInput(t);
+                  if (mathError) setMathError(false);
+                }}
+                onSubmitEditing={submitMath}
+                placeholder="Your answer"
+                placeholderTextColor="rgba(255,244,224,0.4)"
+                keyboardType="numbers-and-punctuation"
+                returnKeyType="done"
+                autoFocus
+                style={[
+                  styles.mathInput,
+                  mathError && { borderColor: "#FF6B6B" },
+                ]}
+              />
+              <Pressable
+                onPress={submitMath}
+                style={({ pressed }) => [
+                  styles.mathSubmit,
+                  { opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Feather name="check" size={16} color="#1A1530" />
+                <Text style={styles.mathSubmitText}>Submit</Text>
+              </Pressable>
+              {mathError && (
+                <Text style={styles.mathError}>
+                  Not quite — try again.
+                </Text>
+              )}
+            </View>
+          ) : (
+            <Pressable
+              onPress={handleSimulateStep}
+              style={({ pressed }) => [
+                styles.simulateBtn,
+                { opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <Feather name="plus" size={14} color="#FFF4E0" />
+              <Text style={styles.simulateText}>{manualLabel}</Text>
+            </Pressable>
+          )}
 
           <View style={styles.bottomRow}>
             {alarm.snoozeEnabled && (
@@ -666,6 +756,55 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
     color: "#FFF4E0",
+  },
+  mathCard: {
+    width: "100%",
+    maxWidth: 360,
+    marginTop: 20,
+    paddingHorizontal: 24,
+    alignItems: "center",
+  },
+  mathPrompt: {
+    fontFamily: "Outfit_700Bold",
+    fontSize: 44,
+    color: "#FFF4E0",
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  mathInput: {
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 24,
+    color: "#FFF4E0",
+    textAlign: "center",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  mathSubmit: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 14,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 24,
+    backgroundColor: "#FFB454",
+  },
+  mathSubmitText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    color: "#1A1530",
+  },
+  mathError: {
+    marginTop: 10,
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    color: "#FFB4B4",
   },
   bottomRow: {
     flexDirection: "row",
