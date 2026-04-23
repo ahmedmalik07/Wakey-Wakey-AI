@@ -10,8 +10,10 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   Vibration,
@@ -22,7 +24,7 @@ import { useAlarms } from "@/contexts/AlarmsContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useColors } from "@/hooks/useColors";
 import { formatPeriod, formatTime } from "@/lib/format";
-import { getMorningMotivator } from "@/lib/gemini";
+import { getMorningMotivator, pickInstantMorningMessage } from "@/lib/gemini";
 import { generateMathProblem, type MathProblem } from "@/lib/math";
 import { getSoundPreset, getToneUri } from "@/lib/sounds";
 import { TextInput } from "react-native";
@@ -290,19 +292,18 @@ export default function RingingScreen() {
       if (success) {
         if (Platform.OS !== "web")
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setMotivatorLoading(true);
-        try {
-          const text = await getMorningMotivator(
-            finalSteps,
-            Math.round((dismissedAt - ranAt) / 1000),
-            alarm?.label ?? "alarm",
-          );
-          setMotivator(text);
-        } catch {
-          setMotivator("Morning, mover. You earned this start.");
-        } finally {
-          setMotivatorLoading(false);
-        }
+        // Show an instant pre-loaded message immediately so the user
+        // never sees a spinner. Then try to upgrade with a Gemini one
+        // in the background — keep the instant one if Gemini fails.
+        setMotivator(pickInstantMorningMessage());
+        setMotivatorLoading(false);
+        getMorningMotivator(
+          finalSteps,
+          Math.round((dismissedAt - ranAt) / 1000),
+          alarm?.label ?? "alarm",
+        )
+          .then((text) => setMotivator(text))
+          .catch(() => {});
       }
     },
     [alarm, recordDismissal, player],
@@ -422,7 +423,15 @@ export default function RingingScreen() {
       />
 
       {phase === "ringing" && (
-        <View style={styles.center}>
+        <KeyboardAvoidingView
+          style={{ flex: 1, width: "100%" }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+        <ScrollView
+          contentContainerStyle={styles.center}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={styles.alarmLabel}>{alarm.label.toUpperCase()}</Text>
           <Text style={styles.bigClock}>
             {formatTime(alarm.hour, alarm.minute)}
@@ -546,7 +555,8 @@ export default function RingingScreen() {
               <Text style={styles.giveUpText}>Give up</Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
+        </KeyboardAvoidingView>
       )}
 
       {phase === "ad" && (
@@ -669,10 +679,11 @@ const ringStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center" },
   center: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
+    paddingVertical: 24,
     width: "100%",
   },
   alarmLabel: {

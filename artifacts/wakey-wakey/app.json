@@ -3,6 +3,7 @@
     "name": "Wakey Wakey",
     "slug": "wakey-wakey",
     "version": "1.0.0",
+    "description": "Wakey Wakey is the alarm that actually gets you out of bed. Choose your wake-up challenge — walk a set number of steps, shake your phone, or solve math problems — and the alarm only stops once you've done it. Pick from soothing built-in sounds or your own music, see a different upbeat morning message every time, and use the Settings tab to dial in haptics, snooze length, default difficulty, and battery-optimization tweaks so alarms reliably fire on Android. No ads inside the wake-up flow, no dark patterns, just a beautifully designed, premium morning routine by wyibe.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "wakey-wakey",
