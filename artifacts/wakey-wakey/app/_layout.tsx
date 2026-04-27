@@ -12,7 +12,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/outfit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import * as Notifications from "expo-notifications";
+import notifee, { EventType } from "@notifee/react-native";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -23,40 +23,72 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { setBaseUrl } from "@workspace/api-client-react";
 import { AlarmsProvider } from "@/contexts/AlarmsContext";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 
+setBaseUrl(process.env.EXPO_PUBLIC_API_URL || null);
+
 SplashScreen.preventAutoHideAsync();
+
+notifee.onBackgroundEvent(async ({ type, detail }) => {
+  const { notification, pressAction } = detail;
+  
+  if (type === EventType.DELIVERED && notification?.data?.alarmId) {
+    // When the alarm fires in the background, upgrade it to a foreground service immediately
+    // so it doesn't get killed by Doze mode.
+    try {
+      await notifee.displayNotification({
+        id: notification.id,
+        title: notification.title,
+        body: notification.body,
+        data: notification.data,
+        android: {
+          ...notification.android,
+          asForegroundService: true,
+        },
+      });
+    } catch (e) {
+      console.error("Failed to upgrade to foreground service", e);
+    }
+  }
+
+  // Handle other background events if needed (e.g., action press)
+});
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   const router = useRouter();
 
-  // Handle notification taps -> route to ringing screen for that alarm
   useEffect(() => {
     if (Platform.OS === "web") return;
-    const sub = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const id = (response.notification.request.content.data as any)
-          ?.alarmId;
+
+    // Handle foreground events (e.g. user taps notification)
+    const unsubscribe = notifee.onForegroundEvent(({ type, detail }) => {
+      if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
+        const id = detail.notification?.data?.alarmId;
         if (id) {
-          router.push({ pathname: "/ringing", params: { id } });
+          router.push({ pathname: "/ringing", params: { id: String(id) } });
         }
-      },
-    );
-    // If app was launched from a notification, jump to the ringing screen
-    Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        const id = (response?.notification.request.content.data as any)
-          ?.alarmId;
+      }
+    });
+
+    // Handle app launched from a notification (including fullScreenAction)
+    notifee.getInitialNotification().then((initialNotification) => {
+      if (initialNotification) {
+        const id = initialNotification.notification.data?.alarmId;
         if (id) {
-          router.push({ pathname: "/ringing", params: { id } });
+          // Add a small delay to ensure routing happens smoothly after mount
+          setTimeout(() => {
+            router.push({ pathname: "/ringing", params: { id: String(id) } });
+          }, 100);
         }
-      })
-      .catch(() => {});
-    return () => sub.remove();
+      }
+    });
+
+    return () => unsubscribe();
   }, [router]);
 
   return (

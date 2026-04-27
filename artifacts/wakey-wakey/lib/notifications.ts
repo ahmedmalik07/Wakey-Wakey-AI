@@ -1,6 +1,12 @@
-import * as Notifications from "expo-notifications";
+import notifee, {
+  AndroidImportance,
+  AndroidVisibility,
+  AndroidCategory,
+  RepeatFrequency,
+  TimestampTrigger,
+  TriggerType,
+} from "@notifee/react-native";
 import { Platform } from "react-native";
-
 import type { Alarm } from "./types";
 
 export const CHANNEL_ID = "wakey-alarm-channel";
@@ -11,34 +17,22 @@ export async function ensureNotificationSetup(): Promise<void> {
   if (Platform.OS === "web") return;
   if (setupDone) return;
   setupDone = true;
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
+
   if (Platform.OS === "android") {
     try {
-      await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+      await notifee.createChannel({
+        id: CHANNEL_ID,
         name: "Wakey Wakey alarms",
-        importance: Notifications.AndroidImportance.MAX,
+        importance: AndroidImportance.HIGH,
         sound: "default",
-        enableVibrate: true,
+        vibration: true,
         vibrationPattern: [0, 400, 200, 400],
         bypassDnd: true,
-        lockscreenVisibility:
-          Notifications.AndroidNotificationVisibility.PUBLIC,
+        visibility: AndroidVisibility.PUBLIC,
         lightColor: "#FF7B47",
       });
     } catch {}
   }
-  try {
-    await Notifications.setNotificationCategoryAsync("alarm", [
-      { identifier: "open", buttonTitle: "Open alarm", options: { opensAppToForeground: true } },
-    ]);
-  } catch {}
 }
 
 export type PermStatus = "granted" | "denied" | "undetermined";
@@ -46,9 +40,8 @@ export type PermStatus = "granted" | "denied" | "undetermined";
 export async function getNotificationPermission(): Promise<PermStatus> {
   if (Platform.OS === "web") return "denied";
   try {
-    const s = await Notifications.getPermissionsAsync();
-    if (s.granted) return "granted";
-    if (!s.canAskAgain && s.status === "denied") return "denied";
+    const settings = await notifee.getNotificationSettings();
+    if (settings.authorizationStatus >= 1) return "granted";
     return "undetermined";
   } catch {
     return "undetermined";
@@ -58,14 +51,9 @@ export async function getNotificationPermission(): Promise<PermStatus> {
 export async function requestNotificationPermission(): Promise<PermStatus> {
   if (Platform.OS === "web") return "denied";
   try {
-    const current = await Notifications.getPermissionsAsync();
-    if (current.granted) return "granted";
-    if (!current.canAskAgain) return "denied";
-    const res = await Notifications.requestPermissionsAsync({
-      ios: { allowAlert: true, allowSound: true, allowBadge: false },
-    });
-    if (res.granted) return "granted";
-    return res.canAskAgain ? "undetermined" : "denied";
+    const settings = await notifee.requestPermission();
+    if (settings.authorizationStatus >= 1) return "granted";
+    return "denied";
   } catch {
     return "undetermined";
   }
@@ -74,10 +62,10 @@ export async function requestNotificationPermission(): Promise<PermStatus> {
 export async function cancelAlarmNotifications(alarmId: string): Promise<void> {
   if (Platform.OS === "web") return;
   try {
-    const all = await Notifications.getAllScheduledNotificationsAsync();
-    for (const n of all) {
-      if ((n.content.data as any)?.alarmId === alarmId) {
-        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    const triggers = await notifee.getTriggerNotificationIds();
+    for (const id of triggers) {
+      if (id.startsWith(`alarm-${alarmId}`)) {
+        await notifee.cancelNotification(id);
       }
     }
   } catch {}
@@ -88,43 +76,60 @@ export async function scheduleAlarmNotifications(alarm: Alarm): Promise<void> {
   await cancelAlarmNotifications(alarm.id);
   if (!alarm.enabled) return;
 
-  const baseContent: Notifications.NotificationContentInput = {
+  const baseNotification = {
     title: alarm.label || "Wakey Wakey",
     body: "Time to wake up — tap to walk it off.",
-    sound: "default",
-    priority: Notifications.AndroidNotificationPriority.MAX,
     data: { alarmId: alarm.id },
-    categoryIdentifier: "alarm",
+    android: {
+      channelId: CHANNEL_ID,
+      importance: AndroidImportance.HIGH,
+      category: AndroidCategory.ALARM,
+      fullScreenAction: {
+        id: "default",
+      },
+      // When the trigger fires, it will display the notification. 
+      // We also handle the DELIVERED event in the background to upgrade it to a foreground service.
+    },
   };
 
   try {
     if (!alarm.days || alarm.days.length === 0) {
       const next = nextOneShot(alarm.hour, alarm.minute);
-      await Notifications.scheduleNotificationAsync({
-        content: baseContent,
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: next,
-          channelId: CHANNEL_ID,
-        } as any,
-      });
+      const trigger: TimestampTrigger = {
+        type: TriggerType.TIMESTAMP,
+        timestamp: next.getTime(),
+        alarmManager: {
+          allowWhileIdle: true,
+        },
+      };
+      await notifee.createTriggerNotification(
+        { ...baseNotification, id: `alarm-${alarm.id}-oneshot` },
+        trigger
+      );
     } else {
       for (const day of alarm.days) {
-        // expo weekday: 1=Sunday..7=Saturday. Our days use 0=Sunday..6=Saturday.
-        const weekday = (day + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
-        await Notifications.scheduleNotificationAsync({
-          content: baseContent,
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-            weekday,
-            hour: alarm.hour,
-            minute: alarm.minute,
-            channelId: CHANNEL_ID,
-          } as any,
-        });
+        // Notifee Trigger weekdays: 1=Sunday..7=Saturday. Our days use 0=Sunday..6=Saturday.
+        // Wait, Notifee uses ISO days or standard JS Date days? 
+        // JS Date: 0=Sun, 1=Mon.
+        // Let's use TimestampTrigger with repeat frequency for weekly alarms, adjusting the first occurrence.
+        const next = nextWeeklyOccurrence(alarm.hour, alarm.minute, day);
+        const trigger: TimestampTrigger = {
+          type: TriggerType.TIMESTAMP,
+          timestamp: next.getTime(),
+          repeatFrequency: RepeatFrequency.WEEKLY,
+          alarmManager: {
+            allowWhileIdle: true,
+          },
+        };
+        await notifee.createTriggerNotification(
+          { ...baseNotification, id: `alarm-${alarm.id}-day-${day}` },
+          trigger
+        );
       }
     }
-  } catch {}
+  } catch (err) {
+    console.error("Failed to schedule alarm", err);
+  }
 }
 
 function nextOneShot(hour: number, minute: number): Date {
@@ -137,10 +142,24 @@ function nextOneShot(hour: number, minute: number): Date {
   return target;
 }
 
+function nextWeeklyOccurrence(hour: number, minute: number, day: number): Date {
+  const now = new Date();
+  const target = new Date();
+  target.setHours(hour, minute, 0, 0);
+  // day is 0..6 (Sun..Sat)
+  const currentDay = target.getDay();
+  let dayDiff = day - currentDay;
+  if (dayDiff < 0 || (dayDiff === 0 && target.getTime() <= now.getTime() + 5_000)) {
+    dayDiff += 7;
+  }
+  target.setDate(target.getDate() + dayDiff);
+  return target;
+}
+
 export async function rescheduleAll(alarms: Alarm[]): Promise<void> {
   if (Platform.OS === "web") return;
   try {
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    await notifee.cancelAllNotifications();
   } catch {}
   for (const a of alarms) {
     await scheduleAlarmNotifications(a);

@@ -39,7 +39,11 @@
         "RECEIVE_BOOT_COMPLETED",
         "DISABLE_KEYGUARD",
         "FOREGROUND_SERVICE",
-        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "USE_FULL_SCREEN_INTENT",
+        "FOREGROUND_SERVICE_SPECIAL_USE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "FOREGROUND_SERVICE_DATA_SYNC"
       ]
     },
     "web": {
@@ -61,6 +65,14 @@
           "color": "#FF7B47",
           "androidMode": "default",
           "androidCollapsedTitle": "Wakey Wakey alarm"
+        }
+      ],
+      [
+        "@notifee/react-native",
+        {
+          "android": {
+            "foregroundServiceType": "specialUse"
+          }
         }
       ]
     ],

@@ -1,3 +1,4 @@
+import notifee from "@notifee/react-native";
 import { Feather } from "@expo/vector-icons";
 import { useAudioPlayer } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
@@ -276,6 +277,10 @@ export default function RingingScreen() {
       try {
         player.pause();
       } catch {}
+      try {
+        await notifee.stopForegroundService();
+        await notifee.cancelAllNotifications();
+      } catch {}
       const ranAt = startedAtRef.current;
       const dismissedAt = Date.now();
       if (alarm) {
@@ -346,6 +351,10 @@ export default function RingingScreen() {
     try {
       player.pause();
     } catch {}
+    try {
+      notifee.stopForegroundService();
+      notifee.cancelAllNotifications();
+    } catch {}
     setPhase("ad");
   };
 
@@ -357,6 +366,10 @@ export default function RingingScreen() {
     Vibration.cancel();
     try {
       player.pause();
+    } catch {}
+    try {
+      await notifee.stopForegroundService();
+      await notifee.cancelAllNotifications();
     } catch {}
     // Push the alarm time forward by snoozeMinutes
     const snoozeAt = new Date(Date.now() + alarm.snoozeMinutes * 60_000);

@@ -164,7 +164,7 @@ const cacheDir =
 export async function getToneUri(preset: SoundPreset): Promise<string | null> {
   if (Platform.OS === "web") {
     const bytes = buildWav(preset.build());
-    const blob = new Blob([bytes], { type: "audio/wav" });
+    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "audio/wav" });
     return URL.createObjectURL(blob);
   }
   if (!cacheDir) return null;

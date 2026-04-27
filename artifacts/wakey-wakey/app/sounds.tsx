@@ -55,7 +55,7 @@ export default function SoundsScreen() {
   };
 
   const handlePreview = async (id: string, uri?: string) => {
-    if (Platform.OS !== "web") Haptics.selectionAsync();
+    if ((Platform.OS as string) !== "web") Haptics.selectionAsync();
     if (playingId === id) {
       stopPreview();
       return;
@@ -92,7 +92,7 @@ export default function SoundsScreen() {
   };
 
   const handleSelect = async (id: string) => {
-    if (Platform.OS !== "web") Haptics.selectionAsync();
+    if ((Platform.OS as string) !== "web") Haptics.selectionAsync();
     if (id === "custom" && !customUri) {
       await pickCustom();
       return;
@@ -102,7 +102,7 @@ export default function SoundsScreen() {
   };
 
   const pickCustom = async () => {
-    if (Platform.OS === "web") return;
+    if ((Platform.OS as string) === "web") return;
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: "audio/*",
@@ -121,14 +121,14 @@ export default function SoundsScreen() {
         customSoundUri: uri,
         customSoundName: name,
       });
-      if (Platform.OS !== "web")
+      if ((Platform.OS as string) !== "web")
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
   };
 
   const handleDone = () => {
     stopPreview();
-    if (Platform.OS !== "web")
+    if ((Platform.OS as string) !== "web")
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.back();
   };
@@ -172,7 +172,7 @@ export default function SoundsScreen() {
           <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
             {customUri
               ? "Saved music or downloaded audio · long-press to change"
-              : Platform.OS === "web"
+              : (Platform.OS as string) === "web"
                 ? "Mobile only — pick MP3/M4A/WAV from your library"
                 : "Choose any MP3/M4A/WAV from your library"}
           </Text>

@@ -17,17 +17,18 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { useSettings, useHaptics } from "@/contexts/SettingsContext";
 import { useColors } from "@/hooks/useColors";
 
-type Status = "granted" | "denied" | "undetermined";
+type Status = "granted" | "denied" | "undetermined" | "unsupported";
 
 function statusColor(status: Status, c: any) {
   if (status === "granted") return "#4ade80";
-  if (status === "denied") return c.destructive;
+  if (status === "denied" || status === "unsupported") return c.destructive;
   return c.accent;
 }
 
 function statusLabel(status: Status) {
   if (status === "granted") return "Granted";
   if (status === "denied") return "Denied";
+  if (status === "unsupported") return "Unsupported";
   return "Not asked yet";
 }
 
@@ -80,7 +81,7 @@ export default function SettingsScreen() {
         primaryLabel={
           pedometer === "granted"
             ? "Re-check"
-            : pedometer === "denied"
+            : pedometer === "denied" || pedometer === "unsupported"
               ? "Open settings"
               : "Grant access"
         }
@@ -101,7 +102,7 @@ export default function SettingsScreen() {
         primaryLabel={
           notifications === "granted"
             ? "Re-check"
-            : notifications === "denied"
+            : notifications === "denied" || notifications === "unsupported"
               ? "Open settings"
               : "Grant access"
         }

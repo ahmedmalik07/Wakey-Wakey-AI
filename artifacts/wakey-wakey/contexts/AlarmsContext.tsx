@@ -47,9 +47,9 @@ export function AlarmsProvider({ children }: { children: React.ReactNode }) {
       const [a, h] = await Promise.all([loadAlarms(), loadHistory()]);
       // Backfill new fields on stored alarms
       const normalized = a.map((al) => ({
-        mathCount: 3,
-        mathDifficulty: "easy" as const,
         ...al,
+        mathCount: (al as any).mathCount ?? 3,
+        mathDifficulty: (al as any).mathDifficulty ?? "easy",
       }));
       setAlarms(normalized);
       setHistory(h);
