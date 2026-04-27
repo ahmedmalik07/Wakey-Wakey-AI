@@ -19,7 +19,9 @@
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSMotionUsageDescription": "Wakey Wakey counts your steps to dismiss alarms so you actually wake up.",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -66,19 +68,17 @@
           "androidMode": "default",
           "androidCollapsedTitle": "Wakey Wakey alarm"
         }
-      ],
-      [
-        "@notifee/react-native",
-        {
-          "android": {
-            "foregroundServiceType": "specialUse"
-          }
-        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "59eb2ebc-5b14-4e95-9c83-68981f64f330"
+      }
+    },
+    "owner": "ahhmedmalik"
   }
 }
