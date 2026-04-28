@@ -63,7 +63,6 @@
     "expo-file-system": "^19.0.21",
     "expo-intent-launcher": "~13.0.8",
     "expo-keep-awake": "^15.0.8",
-    "expo-notifications": "~0.32.16",
     "expo-sensors": "^15.0.8"
   }
 }
