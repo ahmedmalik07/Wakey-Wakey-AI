@@ -89,7 +89,8 @@ export default function StatsScreen() {
         stats.bestSec,
       );
       setInsight(text);
-    } catch (e) {
+    } catch (e: any) {
+      console.error("Insight error:", e?.message || e);
       setError("Couldn't reach the insight engine. Try again in a moment.");
     } finally {
       setLoading(false);

@@ -1,5 +1,7 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  /** Request timeout in milliseconds. Defaults to 15000 (15s). */
+  timeout?: number;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -360,12 +362,30 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // AbortController timeout
+  const timeoutMs = options.timeout ?? 15_000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    const errorData = await parseErrorBody(response, method);
-    throw new ApiError(response, errorData, requestInfo);
+  try {
+    const response = await fetch(input, { ...init, method, headers, signal: controller.signal });
+
+    if (!response.ok) {
+      const errorData = await parseErrorBody(response, method);
+      throw new ApiError(response, errorData, requestInfo);
+    }
+
+    return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  } catch (err: any) {
+    if (err.name === "AbortError" || err.message?.includes("aborted")) {
+      throw new ApiError(
+        new Response(null, { status: 408, statusText: "Request Timeout" }),
+        { error: `Request timed out after ${timeoutMs}ms` },
+        requestInfo,
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
 }

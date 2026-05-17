@@ -1,16 +1,34 @@
 import { customFetch } from "@workspace/api-client-react";
 
+async function fetchWithRetry<T>(
+  url: string,
+  options: RequestInit,
+  retries = 2,
+): Promise<T> {
+  let lastError: Error | null = null;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await customFetch<T>(url, { ...options, timeout: 45000 });
+    } catch (err: any) {
+      lastError = err;
+      if (i < retries) {
+        await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export async function getMorningMotivator(
   steps: number,
   durationSec: number,
   label: string,
 ): Promise<string> {
-  const res = await customFetch<{ text: string }>("/api/gemini/motivate", {
+  return fetchWithRetry<{ text: string }>("/api/gemini/motivate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ steps, durationSec, label }),
-  });
-  return res.text;
+  }).then((res) => res.text);
 }
 
 // Instant offline messages shown the moment the alarm is beaten,
@@ -49,10 +67,9 @@ export async function getWeeklyInsight(
   avgSeconds: number,
   bestSeconds: number,
 ): Promise<string> {
-  const res = await customFetch<{ text: string }>("/api/gemini/insight", {
+  return fetchWithRetry<{ text: string }>("/api/gemini/insight", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ successCount, totalCount, avgSeconds, bestSeconds }),
-  });
-  return res.text;
+  }).then((res) => res.text);
 }

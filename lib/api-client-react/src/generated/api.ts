@@ -13,7 +13,13 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  HealthStatus,
+  MotivateRequest,
+  MotivateResponse,
+  InsightRequest,
+  InsightResponse,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
 import type { ErrorType } from "../custom-fetch";
@@ -99,3 +105,49 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Generate morning motivator
+ * @summary Generate morning motivator
+ */
+export const getGenerateMotivatorUrl = () => {
+  return `/api/gemini/motivate`;
+};
+
+export const generateMotivator = async (
+  motivateRequest: MotivateRequest,
+  options?: RequestInit,
+): Promise<MotivateResponse> => {
+  return customFetch<MotivateResponse>(getGenerateMotivatorUrl(), {
+    ...options,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+    body: JSON.stringify(motivateRequest),
+  });
+};
+
+/**
+ * Generate weekly insight
+ * @summary Generate weekly insight
+ */
+export const getGenerateInsightUrl = () => {
+  return `/api/gemini/insight`;
+};
+
+export const generateInsight = async (
+  insightRequest: InsightRequest,
+  options?: RequestInit,
+): Promise<InsightResponse> => {
+  return customFetch<InsightResponse>(getGenerateInsightUrl(), {
+    ...options,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+    body: JSON.stringify(insightRequest),
+  });
+};

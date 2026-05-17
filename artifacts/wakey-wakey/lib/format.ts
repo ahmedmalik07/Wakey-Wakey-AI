@@ -1,13 +1,18 @@
 import type { Alarm, Weekday } from "./types";
 import { DAY_FULL } from "./types";
 
-export function formatTime(hour: number, minute: number): string {
-  const h = hour % 12 === 0 ? 12 : hour % 12;
+export function formatTime(hour: number, minute: number, use24Hour = false): string {
   const m = minute.toString().padStart(2, "0");
+  if (use24Hour) {
+    const h = hour.toString().padStart(2, "0");
+    return `${h}:${m}`;
+  }
+  const h = hour % 12 === 0 ? 12 : hour % 12;
   return `${h}:${m}`;
 }
 
-export function formatPeriod(hour: number): string {
+export function formatPeriod(hour: number, use24Hour = false): string {
+  if (use24Hour) return "";
   return hour < 12 ? "AM" : "PM";
 }
 

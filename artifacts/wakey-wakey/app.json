@@ -27,6 +27,7 @@
     "android": {
       "icon": "./assets/images/icon.png",
       "package": "com.wyibe.wakeywakey",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#1A1530"
@@ -54,9 +55,7 @@
     "plugins": [
       [
         "expo-router",
-        {
-          "origin": "https://replit.com/"
-        }
+        {}
       ],
       "expo-font",
       "expo-web-browser",
@@ -65,6 +64,9 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     },
     "extra": {
       "eas": {

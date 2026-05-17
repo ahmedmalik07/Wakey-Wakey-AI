@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Wakey Wakey API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: gemini
+    description: AI-powered motivator and insights
 paths:
   /healthz:
     get:
@@ -24,6 +26,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /gemini/motivate:
+    post:
+      operationId: generateMotivator
+      tags: [gemini]
+      summary: Generate morning motivator
+      description: Returns an AI-generated morning message based on alarm dismissal stats
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MotivateRequest"
+      responses:
+        "200":
+          description: Motivator generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotivateResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gemini service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /gemini/insight:
+    post:
+      operationId: generateInsight
+      tags: [gemini]
+      summary: Generate weekly insight
+      description: Returns an AI-generated weekly summary based on alarm history
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InsightRequest"
+      responses:
+        "200":
+          description: Insight generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gemini service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +109,73 @@ components:
           type: string
       required:
         - status
-
+    MotivateRequest:
+      type: object
+      properties:
+        steps:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        durationSec:
+          type: integer
+          minimum: 0
+          maximum: 86400
+        label:
+          type: string
+          minLength: 1
+          maxLength: 100
+      required:
+        - steps
+        - durationSec
+        - label
+    MotivateResponse:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+        - text
+    InsightRequest:
+      type: object
+      properties:
+        successCount:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        totalCount:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        avgSeconds:
+          type: number
+          minimum: 0
+          maximum: 86400
+        bestSeconds:
+          type: number
+          minimum: 0
+          maximum: 86400
+      required:
+        - successCount
+        - totalCount
+        - avgSeconds
+        - bestSeconds
+    InsightResponse:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+        - text
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+      required:
+        - error

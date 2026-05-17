@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@expo/config-plugins": "~9.1.0",
     "@expo-google-fonts/inter": "^0.4.0",
     "@expo/cli": "54.0.23",
     "@expo/ngrok": "^4.1.0",
@@ -58,11 +59,11 @@
     "@expo-google-fonts/outfit": "^0.4.3",
     "@notifee/react-native": "^9.1.8",
     "@react-native-community/slider": "^5.0.1",
-    "expo-audio": "^1.1.1",
+    "expo-audio": "~1.1.1",
     "expo-document-picker": "~14.0.8",
-    "expo-file-system": "^19.0.21",
+    "expo-file-system": "~19.0.21",
     "expo-intent-launcher": "~13.0.8",
-    "expo-keep-awake": "^15.0.8",
-    "expo-sensors": "^15.0.8"
+    "expo-keep-awake": "~15.0.8",
+    "expo-sensors": "~15.0.8"
   }
 }

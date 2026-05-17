@@ -104,8 +104,8 @@ export default function EditAlarmScreen() {
     });
   };
 
-  const openSounds = () => {
-    upsertAlarm(draft);
+  const openSounds = async () => {
+    await upsertAlarm(draft);
     router.push({
       pathname: "/sounds",
       params: { id: draft.id, current: draft.sound },
@@ -129,6 +129,13 @@ export default function EditAlarmScreen() {
           ? 12
           : normalized + 12;
     update({ hour: hour24 });
+  };
+
+  const setHour24 = (h24: number) => {
+    let normalized = h24;
+    if (normalized < 0) normalized = 23;
+    if (normalized > 23) normalized = 0;
+    update({ hour: normalized });
   };
 
   const togglePeriod = () => {
@@ -167,36 +174,38 @@ export default function EditAlarmScreen() {
       >
         <View style={styles.timeDisplayRow}>
           <Text style={[styles.timeDisplay, { color: colors.foreground }]}>
-            {formatTime(draft.hour, draft.minute)}
+            {formatTime(draft.hour, draft.minute, settings.use24Hour)}
           </Text>
-          <Pressable
-            onPress={togglePeriod}
-            style={({ pressed }) => [
-              styles.periodToggle,
-              {
-                backgroundColor: colors.primary,
-                opacity: pressed ? 0.8 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.periodToggleText, { color: colors.primaryForeground }]}>
-              {period}
-            </Text>
-            <Feather
-              name="refresh-cw"
-              size={11}
-              color={colors.primaryForeground}
-              style={{ marginLeft: 6 }}
-            />
-          </Pressable>
+          {!settings.use24Hour && (
+            <Pressable
+              onPress={togglePeriod}
+              style={({ pressed }) => [
+                styles.periodToggle,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.periodToggleText, { color: colors.primaryForeground }]}>
+                {period}
+              </Text>
+              <Feather
+                name="refresh-cw"
+                size={11}
+                color={colors.primaryForeground}
+                style={{ marginLeft: 6 }}
+              />
+            </Pressable>
+          )}
         </View>
         <View style={styles.timeRow}>
           <NumberStepper
             label="Hour"
-            value={display12}
-            min={1}
-            max={12}
-            onChange={setHour12}
+            value={settings.use24Hour ? draft.hour : display12}
+            min={settings.use24Hour ? 0 : 1}
+            max={settings.use24Hour ? 23 : 12}
+            onChange={settings.use24Hour ? setHour24 : setHour12}
             holdRepeat
           />
           <NumberStepper

@@ -17,18 +17,20 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   Vibration,
   View,
 } from "react-native";
 
 import { useAlarms } from "@/contexts/AlarmsContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { useColors } from "@/hooks/useColors";
 import { formatPeriod, formatTime } from "@/lib/format";
 import { getMorningMotivator, pickInstantMorningMessage } from "@/lib/gemini";
 import { generateMathProblem, type MathProblem } from "@/lib/math";
 import { getSoundPreset, getToneUri } from "@/lib/sounds";
-import { TextInput } from "react-native";
+import { scheduleSnoozeNotification } from "@/lib/notifications";
 
 type Phase = "ringing" | "ad" | "dismissed";
 
@@ -37,7 +39,8 @@ export default function RingingScreen() {
   const colors = useColors();
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
-  const { alarms, recordDismissal, upsertAlarm } = useAlarms();
+  const { alarms, recordDismissal } = useAlarms();
+  const { settings } = useSettings();
   const { pedometer: pedometerStatus } = usePermissions();
   const alarm = useMemo(
     () => alarms.find((a) => a.id === params.id) ?? null,
@@ -58,6 +61,7 @@ export default function RingingScreen() {
   const accelSubRef = useRef<{ remove: () => void } | null>(null);
   const pedometerBaselineRef = useRef<number | null>(null);
   const dismissedRef = useRef(false);
+  const volumeRampRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulse = useRef(new Animated.Value(0)).current;
 
   const mode = alarm?.dismissMode ?? "steps";
@@ -125,32 +129,46 @@ export default function RingingScreen() {
   useEffect(() => {
     if (!soundUri) return;
     if (phase !== "ringing") {
-      try {
-        player.pause();
-      } catch {}
+      try { player.pause(); } catch {}
       return;
     }
+    
+    // Clear any existing ramp
+    if (volumeRampRef.current) {
+      clearInterval(volumeRampRef.current);
+      volumeRampRef.current = null;
+    }
+    
     try {
       player.loop = true;
-      player.volume = alarm?.gentleWake ? 0.15 : 1;
       player.play();
+      
+      if (alarm?.gentleWake) {
+        // Start very quiet and ramp up over 30s
+        const startVol = 0.05;
+        player.volume = startVol;
+        const start = Date.now();
+        volumeRampRef.current = setInterval(() => {
+          const elapsed = (Date.now() - start) / 1000;
+          const v = Math.min(1, startVol + (elapsed / 30) * (1 - startVol));
+          try { player.volume = v; } catch {}
+          if (v >= 1 && volumeRampRef.current) {
+            clearInterval(volumeRampRef.current);
+            volumeRampRef.current = null;
+          }
+        }, 500);
+      } else {
+        player.volume = 1;
+      }
     } catch {}
+    
+    return () => {
+      if (volumeRampRef.current) {
+        clearInterval(volumeRampRef.current);
+        volumeRampRef.current = null;
+      }
+    };
   }, [soundUri, phase, player, alarm?.gentleWake]);
-
-  // Gentle wake volume ramp
-  useEffect(() => {
-    if (phase !== "ringing" || !alarm?.gentleWake || !soundUri) return;
-    const start = Date.now();
-    const id = setInterval(() => {
-      const elapsed = (Date.now() - start) / 1000;
-      const v = Math.min(1, 0.15 + elapsed / 30);
-      try {
-        player.volume = v;
-      } catch {}
-      if (v >= 1) clearInterval(id);
-    }, 500);
-    return () => clearInterval(id);
-  }, [phase, alarm?.gentleWake, soundUri, player]);
 
   // Pulse animation
   useEffect(() => {
@@ -371,13 +389,8 @@ export default function RingingScreen() {
       await notifee.stopForegroundService();
       await notifee.cancelAllNotifications();
     } catch {}
-    // Push the alarm time forward by snoozeMinutes
-    const snoozeAt = new Date(Date.now() + alarm.snoozeMinutes * 60_000);
-    await upsertAlarm({
-      ...alarm,
-      hour: snoozeAt.getHours(),
-      minute: snoozeAt.getMinutes(),
-    });
+    // Schedule a one-time snooze notification without mutating the alarm time
+    await scheduleSnoozeNotification(alarm, alarm.snoozeMinutes);
     router.back();
   };
 
@@ -438,7 +451,8 @@ export default function RingingScreen() {
       {phase === "ringing" && (
         <KeyboardAvoidingView
           style={{ flex: 1, width: "100%" }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
+          keyboardVerticalOffset={0}
         >
         <ScrollView
           contentContainerStyle={styles.center}
@@ -447,10 +461,12 @@ export default function RingingScreen() {
         >
           <Text style={styles.alarmLabel}>{alarm.label.toUpperCase()}</Text>
           <Text style={styles.bigClock}>
-            {formatTime(alarm.hour, alarm.minute)}
-            <Text style={styles.bigPeriod}>
-              {" "}{formatPeriod(alarm.hour)}
-            </Text>
+            {formatTime(alarm.hour, alarm.minute, settings.use24Hour)}
+            {!settings.use24Hour && (
+              <Text style={styles.bigPeriod}>
+                {" "}{formatPeriod(alarm.hour, settings.use24Hour)}
+              </Text>
+            )}
           </Text>
           <Text style={styles.elapsed}>Ringing for {elapsedLabel}</Text>
 
@@ -575,7 +591,7 @@ export default function RingingScreen() {
       {phase === "ad" && (
         <View style={styles.center}>
           <View style={styles.adCard}>
-            <Text style={styles.adTag}>SPONSORED</Text>
+            <Text style={styles.adTag}>PREMIUM</Text>
             <Text style={styles.adHeadline}>
               Could've walked it off in {goal} {goalLabel}.
             </Text>

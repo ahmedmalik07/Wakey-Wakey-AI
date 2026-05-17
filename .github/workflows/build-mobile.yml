@@ -1,0 +1,125 @@
+name: Build Mobile App (APK + AAB)
+
+on:
+  # Run manually from the GitHub Actions tab
+  workflow_dispatch:
+
+  # Optionally run on every push to main
+  # push:
+  #   branches: [main]
+
+jobs:
+  typecheck:
+    name: Typecheck Workspace
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck libs
+        run: pnpm run typecheck:libs
+
+      - name: Typecheck mobile app
+        run: pnpm --filter @workspace/wakey-wakey run typecheck
+
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server run typecheck
+
+  build-apk:
+    name: Build APK (Preview)
+    needs: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build APK
+        working-directory: artifacts/wakey-wakey
+        run: |
+          eas build \
+            --platform android \
+            --profile preview \
+            --non-interactive \
+            --output ${{ github.workspace }}/wakey-wakey-preview.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wakey-wakey-preview-apk
+          path: ${{ github.workspace }}/wakey-wakey-preview.apk
+          retention-days: 7
+
+  build-aab:
+    name: Build AAB (Production)
+    needs: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build AAB
+        working-directory: artifacts/wakey-wakey
+        run: |
+          eas build \
+            --platform android \
+            --profile production \
+            --non-interactive \
+            --output ${{ github.workspace }}/wakey-wakey-production.aab
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wakey-wakey-production-aab
+          path: ${{ github.workspace }}/wakey-wakey-production.aab
+          retention-days: 30

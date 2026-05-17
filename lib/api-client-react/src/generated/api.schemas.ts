@@ -8,3 +8,30 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface MotivateRequest {
+  steps: number;
+  durationSec: number;
+  label: string;
+}
+
+export interface MotivateResponse {
+  text: string;
+}
+
+export interface InsightRequest {
+  successCount: number;
+  totalCount: number;
+  avgSeconds: number;
+  bestSeconds: number;
+}
+
+export interface InsightResponse {
+  text: string;
+}
+
+export interface ErrorResponse {
+  error: string;
+  code?: string;
+  details?: string[];
+}

@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Credits } from "@/components/Credits";
 import { useAlarms } from "@/contexts/AlarmsContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { useColors } from "@/hooks/useColors";
 import {
   formatCountdown,
@@ -33,6 +34,7 @@ export default function AlarmsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { alarms, toggleAlarm } = useAlarms();
+  const { settings } = useSettings();
   const { pedometer, requestPedometer, openSettings } = usePermissions();
   const [now, setNow] = useState<number>(Date.now());
 
@@ -102,8 +104,8 @@ export default function AlarmsScreen() {
               </Text>
               <Text style={styles.heroSub}>
                 {nextAlarm.alarm.label} ·{" "}
-                {formatTime(nextAlarm.alarm.hour, nextAlarm.alarm.minute)}{" "}
-                {formatPeriod(nextAlarm.alarm.hour)}
+                {formatTime(nextAlarm.alarm.hour, nextAlarm.alarm.minute, settings.use24Hour)}
+                {!settings.use24Hour && ` ${formatPeriod(nextAlarm.alarm.hour, settings.use24Hour)}`}
               </Text>
             </>
           ) : (
@@ -220,6 +222,7 @@ function AlarmRow({
   onPress: () => void;
 }) {
   const colors = useColors();
+  const { settings } = useSettings();
   return (
     <Pressable
       onPress={onPress}
@@ -244,16 +247,18 @@ function AlarmRow({
               },
             ]}
           >
-            {formatTime(alarm.hour, alarm.minute)}
+            {formatTime(alarm.hour, alarm.minute, settings.use24Hour)}
           </Text>
-          <Text
-            style={[
-              styles.period,
-              { color: colors.mutedForeground },
-            ]}
-          >
-            {formatPeriod(alarm.hour)}
-          </Text>
+          {!settings.use24Hour && (
+            <Text
+              style={[
+                styles.period,
+                { color: colors.mutedForeground },
+              ]}
+            >
+              {formatPeriod(alarm.hour, settings.use24Hour)}
+            </Text>
+          )}
         </View>
         <Text style={[styles.label, { color: colors.foreground }]}>
           {alarm.label}

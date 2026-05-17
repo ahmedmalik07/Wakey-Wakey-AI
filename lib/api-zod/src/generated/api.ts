@@ -14,3 +14,30 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+export const MotivateRequest = zod.object({
+  steps: zod.number().int().min(0).max(1000000),
+  durationSec: zod.number().int().min(0).max(86400),
+  label: zod.string().min(1).max(100),
+});
+
+export const MotivateResponse = zod.object({
+  text: zod.string(),
+});
+
+export const InsightRequest = zod.object({
+  successCount: zod.number().int().min(0).max(10000),
+  totalCount: zod.number().int().min(0).max(10000),
+  avgSeconds: zod.number().min(0).max(86400),
+  bestSeconds: zod.number().min(0).max(86400),
+});
+
+export const InsightResponse = zod.object({
+  text: zod.string(),
+});
+
+export const ErrorResponse = zod.object({
+  error: zod.string(),
+  code: zod.string().optional(),
+  details: zod.array(zod.string()).optional(),
+});

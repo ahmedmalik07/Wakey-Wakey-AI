@@ -55,7 +55,7 @@ export async function requestNotificationPermission(): Promise<PermStatus> {
     if (settings.authorizationStatus >= 1) return "granted";
     return "denied";
   } catch {
-    return "undetermined";
+    return "denied";
   }
 }
 
@@ -64,7 +64,7 @@ export async function cancelAlarmNotifications(alarmId: string): Promise<void> {
   try {
     const triggers = await notifee.getTriggerNotificationIds();
     for (const id of triggers) {
-      if (id.startsWith(`alarm-${alarmId}`)) {
+      if (id.startsWith(`alarm-${alarmId}`) || id.startsWith(`snooze-${alarmId}`)) {
         await notifee.cancelNotification(id);
       }
     }
@@ -87,7 +87,7 @@ export async function scheduleAlarmNotifications(alarm: Alarm): Promise<void> {
       fullScreenAction: {
         id: "default",
       },
-      // When the trigger fires, it will display the notification. 
+      // When the trigger fires, it will display the notification.
       // We also handle the DELIVERED event in the background to upgrade it to a foreground service.
     },
   };
@@ -109,7 +109,7 @@ export async function scheduleAlarmNotifications(alarm: Alarm): Promise<void> {
     } else {
       for (const day of alarm.days) {
         // Notifee Trigger weekdays: 1=Sunday..7=Saturday. Our days use 0=Sunday..6=Saturday.
-        // Wait, Notifee uses ISO days or standard JS Date days? 
+        // Wait, Notifee uses ISO days or standard JS Date days?
         // JS Date: 0=Sun, 1=Mon.
         // Let's use TimestampTrigger with repeat frequency for weekly alarms, adjusting the first occurrence.
         const next = nextWeeklyOccurrence(alarm.hour, alarm.minute, day);
@@ -130,6 +130,49 @@ export async function scheduleAlarmNotifications(alarm: Alarm): Promise<void> {
   } catch (err) {
     console.error("Failed to schedule alarm", err);
   }
+}
+
+/**
+ * Schedule a one-time snooze notification without mutating the alarm's stored time.
+ */
+export async function scheduleSnoozeNotification(alarm: Alarm, snoozeMinutes: number): Promise<void> {
+  if (Platform.OS === "web") return;
+  // Cancel any existing snooze for this alarm first
+  try {
+    const triggers = await notifee.getTriggerNotificationIds();
+    for (const id of triggers) {
+      if (id.startsWith(`snooze-${alarm.id}`)) {
+        await notifee.cancelNotification(id);
+      }
+    }
+  } catch {}
+
+  const snoozeAt = new Date(Date.now() + snoozeMinutes * 60_000);
+  const trigger: TimestampTrigger = {
+    type: TriggerType.TIMESTAMP,
+    timestamp: snoozeAt.getTime(),
+    alarmManager: {
+      allowWhileIdle: true,
+    },
+  };
+
+  await notifee.createTriggerNotification(
+    {
+      id: `snooze-${alarm.id}`,
+      title: alarm.label || "Wakey Wakey",
+      body: `Snoozed — time to wake up in ${snoozeMinutes}m.`,
+      data: { alarmId: alarm.id, isSnooze: "true" },
+      android: {
+        channelId: CHANNEL_ID,
+        importance: AndroidImportance.HIGH,
+        category: AndroidCategory.ALARM,
+        fullScreenAction: {
+          id: "default",
+        },
+      },
+    },
+    trigger
+  );
 }
 
 function nextOneShot(hour: number, minute: number): Date {

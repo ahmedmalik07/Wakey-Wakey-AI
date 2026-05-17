@@ -34,4 +34,3 @@ externalPort = 3000
 [userenv]
 
 [userenv.shared]
-EXPO_PUBLIC_GEMINI_API_KEY = "AIzaSyAz3Cs8IYUdEE7B1doHq-fmdmEOcd3uqZY"
