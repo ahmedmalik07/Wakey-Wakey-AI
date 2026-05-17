@@ -27,6 +27,7 @@
     "android": {
       "icon": "./assets/images/icon.png",
       "package": "com.wyibe.wakeywakey",
+      "versionCode": 2,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
