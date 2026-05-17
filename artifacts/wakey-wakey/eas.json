@@ -20,6 +20,11 @@
     "production": {
       "env": {
         "EXPO_PUBLIC_API_URL": "https://wakey-backend.onrender.com"
+      },
+      "android": {
+        "buildArtifactPaths": [
+          "android/app/build/outputs/mapping/release/mapping.txt"
+        ]
       }
     }
   },
